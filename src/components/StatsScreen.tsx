@@ -47,41 +47,68 @@ export function StatsScreen({
   onOpenResults: () => void;
   onLogTest: (subjectId: string | null) => void;
 }) {
-  const [subjectId, setSubjectId] = useState<string>('all');
-  const [modeId, setModeId] = useState<string>('all');
+  const [subjectId, setSubjectId] = useState<string>('');
+  const [modeId, setModeId] = useState<string>('');
   const [range, setRange] = useState<Range>('all');
 
+  const trackSubjects = useMemo(
+    () => data.subjects.filter((s) => s.track === data.activeTrack),
+    [data.subjects, data.activeTrack],
+  );
+  const trackSubjectIds = useMemo(
+    () => new Set(trackSubjects.map((s) => s.id)),
+    [trackSubjects],
+  );
+
+  // a selection left over from the other track resets to unselected
+  const effectiveSubjectId = trackSubjectIds.has(subjectId) ? subjectId : '';
+
   const modesForSubject = useMemo(() => {
-    if (subjectId === 'all') return [];
-    return data.modes.filter((m) => m.subjectId === subjectId);
-  }, [data.modes, subjectId]);
+    if (effectiveSubjectId === '') return [];
+    return data.modes.filter((m) => m.subjectId === effectiveSubjectId);
+  }, [data.modes, effectiveSubjectId]);
 
   const rangeStartMs = rangeStart(range, Date.now());
 
   const inRange = useMemo(
-    () => data.sessions.filter((s) => s.endedAt >= rangeStartMs),
-    [data.sessions, rangeStartMs],
+    () =>
+      data.sessions.filter(
+        (s) => trackSubjectIds.has(s.subjectId) && s.endedAt >= rangeStartMs,
+      ),
+    [data.sessions, trackSubjectIds, rangeStartMs],
   );
 
-  const filtered = useMemo(() => {
-    let list = inRange;
-    if (subjectId !== 'all') list = list.filter((s) => s.subjectId === subjectId);
-    if (modeId !== 'all') list = list.filter((s) => s.modeId === modeId);
-    return list;
-  }, [inRange, subjectId, modeId]);
+  // summary / friction follow the subject choice, never the mode
+  const filtered = useMemo(
+    () =>
+      effectiveSubjectId === ''
+        ? inRange
+        : inRange.filter((s) => s.subjectId === effectiveSubjectId),
+    [inRange, effectiveSubjectId],
+  );
 
-  // Efficiency chart: plot sessions sharing one unit — the most recently
-  // logged unit in the current filter, so a mode's unit change never mixes axes.
+  // Efficiency curve: exactly one subject + one mode, sessions with output only.
+  const pairSessions = useMemo(
+    () =>
+      effectiveSubjectId !== '' && modeId !== ''
+        ? inRange.filter(
+            (s) => s.subjectId === effectiveSubjectId && s.modeId === modeId,
+          )
+        : [],
+    [inRange, effectiveSubjectId, modeId],
+  );
+
+  // One axis, one unit: the most recently logged unit in this subject+mode pair.
   const unit = useMemo(() => {
-    const withOutput = filtered
+    const withOutput = pairSessions
       .filter((s) => s.outputQuantity !== null && s.outputUnit)
       .sort((a, b) => b.endedAt - a.endedAt);
     return withOutput.length > 0 ? (withOutput[0].outputUnit as string) : null;
-  }, [filtered]);
+  }, [pairSessions]);
 
   const effPoints: EffPoint[] = useMemo(() => {
     if (!unit) return [];
-    return filtered
+    return pairSessions
       .filter((s) => s.outputUnit === unit && s.outputQuantity !== null && s.focusedMs > 0)
       .map((s) => ({
         ts: s.endedAt,
@@ -89,7 +116,7 @@ export function StatsScreen({
         session: s,
       }))
       .sort((a, b) => a.ts - b.ts);
-  }, [filtered, unit]);
+  }, [pairSessions, unit]);
 
   const totalMs = filtered.reduce((sum, s) => sum + s.focusedMs, 0);
   const avgEff =
@@ -100,11 +127,11 @@ export function StatsScreen({
   const bySubject = useMemo(() => {
     const map = new Map<string, number>();
     for (const s of inRange) map.set(s.subjectId, (map.get(s.subjectId) ?? 0) + s.focusedMs);
-    return data.subjects
+    return trackSubjects
       .map((sub) => ({ subject: sub, ms: map.get(sub.id) ?? 0 }))
       .filter((x) => x.ms > 0)
       .sort((a, b) => b.ms - a.ms);
-  }, [inRange, data.subjects]);
+  }, [inRange, trackSubjects]);
 
   const maxSubjectMs = bySubject[0]?.ms ?? 1;
 
@@ -117,15 +144,17 @@ export function StatsScreen({
     [filtered],
   );
 
-  const noFiltersActive = subjectId === 'all' && modeId === 'all' && range === 'all';
+  const noFiltersActive = effectiveSubjectId === '' && range === 'all';
 
   // most recent test for the filtered subject (or overall) — one quiet line
   const lastTest = useMemo(() => {
     const list = data.tests.filter(
-      (t) => subjectId === 'all' || t.subjectId === subjectId,
+      (t) =>
+        trackSubjectIds.has(t.subjectId) &&
+        (effectiveSubjectId === '' || t.subjectId === effectiveSubjectId),
     );
     return list.sort((a, b) => b.takenAt - a.takenAt)[0] ?? null;
-  }, [data.tests, subjectId]);
+  }, [data.tests, trackSubjectIds, effectiveSubjectId]);
 
   const lastTestGain = lastTest ? gainPercentFor(lastTest, data) : null;
 
@@ -140,20 +169,20 @@ export function StatsScreen({
         <select
           id="stats-subject"
           className="input input-select"
-          value={subjectId}
+          value={effectiveSubjectId}
           onChange={(e) => {
             setSubjectId(e.target.value);
-            setModeId('all');
+            setModeId('');
           }}
         >
-          <option value="all">All subjects</option>
-          {data.subjects.map((s) => (
+          <option value="">Subject…</option>
+          {trackSubjects.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
             </option>
           ))}
         </select>
-        {subjectId !== 'all' && modesForSubject.length > 0 && (
+        {effectiveSubjectId !== '' && modesForSubject.length > 0 && (
           <>
             <label className="sr-only" htmlFor="stats-mode">
               Filter by mode
@@ -164,7 +193,7 @@ export function StatsScreen({
               value={modeId}
               onChange={(e) => setModeId(e.target.value)}
             >
-              <option value="all">All modes</option>
+              <option value="">Mode…</option>
               {modesForSubject.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
@@ -189,7 +218,7 @@ export function StatsScreen({
         <button
           type="button"
           className="link-muted stats-log-test"
-          onClick={() => onLogTest(subjectId === 'all' ? null : subjectId)}
+          onClick={() => onLogTest(effectiveSubjectId || null)}
         >
           Log a test for this subject
         </button>
@@ -230,7 +259,9 @@ export function StatsScreen({
 
       <section className="stats-block">
         <h2 className="block-title">Efficiency over time</h2>
-        {effPoints.length >= 2 ? (
+        {effectiveSubjectId === '' || modeId === '' ? (
+          <p className="empty">Pick a subject and a mode to graph efficiency.</p>
+        ) : effPoints.length >= 2 ? (
           <div className="chart-wrap">
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={effPoints} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
@@ -289,7 +320,7 @@ export function StatsScreen({
         ) : (
           <p className="empty">
             Need at least two logged outputs in this mode to graph.
-            {unit === null && modeId !== 'all' && ' Units must match.'}
+            {unit === null && ' Units must match.'}
           </p>
         )}
       </section>

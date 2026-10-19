@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ActiveSession, AppData, BlockReading, Screen, Session, SessionPatch, SubjectColor, Test } from './types';
+import type { ActiveSession, AppData, BlockReading, Screen, Session, SessionPatch, SubjectColor, Test, Track } from './types';
 import { loadData, saveData, uid } from './storage';
 import { activeFocusedMs, activePausedMs, applySessionPatch, formatDuration } from './utils';
+import { OPTIMIZATION_MODE, optimizationSubjectId } from './optimization';
 import { TopBar } from './components/TopBar';
 import { FocusScreen } from './components/FocusScreen';
 import { SessionsScreen } from './components/SessionsScreen';
@@ -27,6 +28,11 @@ export default function App() {
   useEffect(() => {
     saveData(data);
   }, [data]);
+
+  // IB swaps the whole theme via data-track on <html>; IGCSE CSS is untouched.
+  useEffect(() => {
+    document.documentElement.dataset.track = data.activeTrack;
+  }, [data.activeTrack]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -164,7 +170,7 @@ export default function App() {
     const id = uid();
     setData((d) => ({
       ...d,
-      subjects: [...d.subjects, { id, name: name.trim(), color, createdAt: Date.now() }],
+      subjects: [...d.subjects, { id, name: name.trim(), color, track: d.activeTrack, createdAt: Date.now() }],
       lastUsed: { ...d.lastUsed, subjectId: id },
     }));
     return id;
@@ -185,9 +191,14 @@ export default function App() {
     setData((d) => {
       if (d.activeSession?.subjectId === id) return d; // guarded in the sheet too
       const subjects = d.subjects.filter((s) => s.id !== id);
+      const removed = d.subjects.find((s) => s.id === id);
       const lastUsed =
         d.lastUsed.subjectId === id
-          ? { ...d.lastUsed, subjectId: subjects[0]?.id ?? null }
+          ? {
+              ...d.lastUsed,
+              subjectId:
+                subjects.find((s) => s.track === removed?.track)?.id ?? subjects[0]?.id ?? null,
+            }
           : d.lastUsed;
       return {
         ...d,
@@ -238,13 +249,47 @@ export default function App() {
     setScreen('results');
   }, []);
 
+  /** Switch desks; a running session on the other track blocks the switch. */
+  const setTrack = useCallback(
+    (track: Track) => {
+      if (track === data.activeTrack) return;
+      const active = data.activeSession;
+      if (active) {
+        const subject = data.subjects.find((s) => s.id === active.subjectId);
+        if (subject && subject.track !== track) {
+          showToast(
+            `A ${subject.track === 'ib' ? 'IB' : 'IGCSE'} session is still running — end it before switching.`,
+          );
+          return;
+        }
+      }
+      setData((d) => ({ ...d, activeTrack: track }));
+    },
+    [data, showToast],
+  );
+
+  /** Results → live Optimization session on the canonical subject. */
+  const startOptimize = useCallback(() => {
+    if (data.activeSession) {
+      showToast('A session is already running — pause or end it first.');
+      return;
+    }
+    const subjectId = optimizationSubjectId(data);
+    if (!subjectId) return;
+    startSession(subjectId, OPTIMIZATION_MODE);
+    setScreen('focus');
+  }, [data, startSession, showToast]);
+
   return (
     <div className="app">
       <TopBar
         screen={screen}
         onNavigate={setScreen}
         sessions={data.sessions}
+        subjects={data.subjects}
         activeSession={data.activeSession}
+        track={data.activeTrack}
+        onTrackChange={setTrack}
       />
       <main className="main">
         {screen === 'focus' && (
@@ -272,6 +317,7 @@ export default function App() {
             onDeleteTest={deleteTest}
             onSaveReading={saveReading}
             onApplyNextMode={applyNextMode}
+            onStartOptimize={startOptimize}
           />
         )}
       </main>

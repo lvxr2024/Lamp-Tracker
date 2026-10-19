@@ -43,6 +43,7 @@ export function ManageSubjectsSheet({ data, onRename, onDelete, onClose }: Props
   const sessionCount = (id: string) => data.sessions.filter((s) => s.subjectId === id).length;
   const testCount = (id: string) => data.tests.filter((t) => t.subjectId === id).length;
   const modeCount = (id: string) => data.modes.filter((m) => m.subjectId === id).length;
+  const trackSubjects = data.subjects.filter((s) => s.track === data.activeTrack);
 
   const deletingBlocked =
     deleteTarget !== null && data.activeSession?.subjectId === deleteTarget.id;
@@ -63,7 +64,7 @@ export function ManageSubjectsSheet({ data, onRename, onDelete, onClose }: Props
         </h2>
 
         <ul className="manage-list">
-          {data.subjects.map((s) => (
+          {trackSubjects.map((s) => (
             <li key={s.id} className="manage-item">
               {renamingId === s.id ? (
                 <div className="rename-row">

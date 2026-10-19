@@ -12,10 +12,11 @@ interface Props {
 }
 
 export function LogTestSheet({ data, initialSubjectId, onSave, onClose }: Props) {
+  const trackSubjects = data.subjects.filter((s) => s.track === data.activeTrack);
   const validInitial =
-    initialSubjectId && data.subjects.some((s) => s.id === initialSubjectId)
+    initialSubjectId && trackSubjects.some((s) => s.id === initialSubjectId)
       ? initialSubjectId
-      : (data.subjects[0]?.id ?? null);
+      : (trackSubjects[0]?.id ?? null);
   const [subjectId, setSubjectId] = useState<string | null>(validInitial);
   const [title, setTitle] = useState('');
   const [dateStr, setDateStr] = useState(toISODate(Date.now()));
@@ -77,7 +78,7 @@ export function LogTestSheet({ data, initialSubjectId, onSave, onClose }: Props)
     .reduce((sum, s) => sum + s.focusedMs, 0);
   const blockCount = windowSessions.filter((s) => checked.has(s.id)).length;
 
-  const noSubjects = data.subjects.length === 0;
+  const noSubjects = trackSubjects.length === 0;
   const canSave =
     !noSubjects &&
     subjectId !== null &&
@@ -121,7 +122,7 @@ export function LogTestSheet({ data, initialSubjectId, onSave, onClose }: Props)
                 Subject
               </span>
               <div className="segmented" role="group" aria-labelledby="log-test-subject-label">
-                {data.subjects.map((s) => (
+                {trackSubjects.map((s) => (
                   <button
                     key={s.id}
                     type="button"
@@ -205,9 +206,10 @@ export function LogTestSheet({ data, initialSubjectId, onSave, onClose }: Props)
               <label className="field-label" htmlFor="log-test-feedback">
                 Feedback
               </label>
-              <input
+              <textarea
                 id="log-test-feedback"
-                className="input"
+                className="input notes-input"
+                rows={4}
                 placeholder="What did the paper show you?"
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}

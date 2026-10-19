@@ -20,6 +20,7 @@ interface Props {
   onDeleteTest: (id: string) => void;
   onSaveReading: (testId: string, reading: BlockReading) => void;
   onApplyNextMode: (subjectId: string, modeLabel: string) => void;
+  onStartOptimize: () => void;
 }
 
 interface TestPoint {
@@ -41,12 +42,25 @@ export function ResultsScreen({
   onDeleteTest,
   onSaveReading,
   onApplyNextMode,
+  onStartOptimize,
 }: Props) {
   const [subjectFilter, setSubjectFilter] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [logSubject, setLogSubject] = useState<string | null>(null);
   const [handledRequest, setHandledRequest] = useState(logRequest);
+
+  const trackSubjects = useMemo(
+    () => data.subjects.filter((s) => s.track === data.activeTrack),
+    [data.subjects, data.activeTrack],
+  );
+  const trackSubjectIds = useMemo(
+    () => new Set(trackSubjects.map((s) => s.id)),
+    [trackSubjects],
+  );
+  // a filter left over from the other track falls back to "all"
+  const effectiveFilter =
+    subjectFilter !== 'all' && trackSubjectIds.has(subjectFilter) ? subjectFilter : 'all';
 
   // open the log sheet when Stats (or another caller) requests it
   if (logRequest && logRequest !== handledRequest) {
@@ -62,14 +76,15 @@ export function ResultsScreen({
 
   const rows = useMemo(() => {
     const list = data.tests
-      .filter((t) => subjectFilter === 'all' || t.subjectId === subjectFilter)
+      .filter((t) => trackSubjectIds.has(t.subjectId))
+      .filter((t) => effectiveFilter === 'all' || t.subjectId === effectiveFilter)
       .sort((a, b) => b.takenAt - a.takenAt);
     return list.map((test) => ({ test, a: analyzeTest(test, data) }));
-  }, [data, subjectFilter]);
+  }, [data, trackSubjectIds, effectiveFilter]);
 
   // grouped by subject when unfiltered, in order of most recent test
   const groups = useMemo(() => {
-    if (subjectFilter !== 'all') return [{ subjectId: subjectFilter, items: rows }];
+    if (effectiveFilter !== 'all') return [{ subjectId: effectiveFilter, items: rows }];
     const order: string[] = [];
     const bySubject = new Map<string, { test: Test; a: TestAnalysis }[]>();
     for (const r of rows) {
@@ -80,13 +95,13 @@ export function ResultsScreen({
       bySubject.get(r.test.subjectId)!.push(r);
     }
     return order.map((subjectId) => ({ subjectId, items: bySubject.get(subjectId)! }));
-  }, [rows, subjectFilter]);
+  }, [rows, effectiveFilter]);
 
   // one gold line: percent over time for the selected subject (never mixed)
   const chartPoints: TestPoint[] = useMemo(() => {
-    if (subjectFilter === 'all') return [];
+    if (effectiveFilter === 'all') return [];
     return data.tests
-      .filter((t) => t.subjectId === subjectFilter)
+      .filter((t) => t.subjectId === effectiveFilter)
       .sort((a, b) => a.takenAt - b.takenAt)
       .map((t) => {
         const a = analyzeTest(t, data);
@@ -103,20 +118,20 @@ export function ResultsScreen({
           prepMs: a.block.focusedMs,
         };
       });
-  }, [data, subjectFilter]);
+  }, [data, effectiveFilter]);
 
   const selected = data.tests.find((t) => t.id === selectedId) ?? null;
 
   // subject filtered, sessions exist, no test yet → speculative block reading
   const looseBlock = useMemo(() => {
-    if (subjectFilter === 'all') return null;
-    if (data.tests.some((t) => t.subjectId === subjectFilter)) return null;
+    if (effectiveFilter === 'all') return null;
+    if (data.tests.some((t) => t.subjectId === effectiveFilter)) return null;
     const sessions = data.sessions
-      .filter((s) => s.subjectId === subjectFilter)
+      .filter((s) => s.subjectId === effectiveFilter)
       .sort((a, b) => b.endedAt - a.endedAt);
     if (sessions.length === 0) return null;
-    return { subjectId: subjectFilter, sessions };
-  }, [data, subjectFilter]);
+    return { subjectId: effectiveFilter, sessions };
+  }, [data, effectiveFilter]);
 
   const loosePayload = useMemo(
     () =>
@@ -143,11 +158,11 @@ export function ResultsScreen({
         <select
           id="results-subject"
           className="input input-select"
-          value={subjectFilter}
+          value={effectiveFilter}
           onChange={(e) => setSubjectFilter(e.target.value)}
         >
           <option value="all">All subjects</option>
-          {data.subjects.map((s) => (
+          {trackSubjects.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
             </option>
@@ -156,8 +171,15 @@ export function ResultsScreen({
         <button
           type="button"
           className="btn btn-secondary btn-small results-log-btn"
+          onClick={onStartOptimize}
+        >
+          Start optimizing
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary btn-small"
           onClick={() => {
-            setLogSubject(subjectFilter === 'all' ? null : subjectFilter);
+            setLogSubject(effectiveFilter === 'all' ? null : effectiveFilter);
             setLogOpen(true);
           }}
         >
@@ -186,7 +208,7 @@ export function ResultsScreen({
           const subject = data.subjects.find((s) => s.id === g.subjectId);
           return (
             <section key={g.subjectId} className="day-group">
-              {subjectFilter === 'all' && (
+              {effectiveFilter === 'all' && (
                 <h2 className="day-label">{subject?.name ?? 'Unknown subject'}</h2>
               )}
               <ul className="session-list">
@@ -224,7 +246,7 @@ export function ResultsScreen({
         })
       )}
 
-      {subjectFilter !== 'all' && chartPoints.length >= 2 && (
+      {effectiveFilter !== 'all' && chartPoints.length >= 2 && (
         <section className="stats-block">
           <h2 className="block-title">Test percent over time</h2>
           <div className="chart-wrap">

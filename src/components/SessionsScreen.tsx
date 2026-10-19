@@ -16,9 +16,19 @@ export function SessionsScreen({ data, onEdit }: Props) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  const trackSubjectIds = useMemo(
+    () => new Set(data.subjects.filter((s) => s.track === data.activeTrack).map((s) => s.id)),
+    [data.subjects, data.activeTrack],
+  );
+  // a filter left over from the other track falls back to "all"
+  const effectiveFilter =
+    subjectFilter !== 'all' && trackSubjectIds.has(subjectFilter) ? subjectFilter : 'all';
+
   const sessions = useMemo(() => {
-    let list = [...data.sessions].sort((a, b) => b.endedAt - a.endedAt);
-    if (subjectFilter !== 'all') list = list.filter((s) => s.subjectId === subjectFilter);
+    let list = [...data.sessions]
+      .filter((s) => trackSubjectIds.has(s.subjectId))
+      .sort((a, b) => b.endedAt - a.endedAt);
+    if (effectiveFilter !== 'all') list = list.filter((s) => s.subjectId === effectiveFilter);
     if (hasNotes) list = list.filter((s) => !!s.notes);
     if (hasFriction) list = list.filter((s) => !!s.friction);
     const q = query.trim().toLowerCase();
@@ -28,7 +38,7 @@ export function SessionsScreen({ data, onEdit }: Props) {
       );
     }
     return list;
-  }, [data.sessions, subjectFilter, hasNotes, hasFriction, query]);
+  }, [data.sessions, trackSubjectIds, effectiveFilter, hasNotes, hasFriction, query]);
 
   // group by day
   const groups: { label: string; items: Session[] }[] = [];
@@ -52,15 +62,17 @@ export function SessionsScreen({ data, onEdit }: Props) {
         <select
           id="filter-subject"
           className="input input-select"
-          value={subjectFilter}
+          value={effectiveFilter}
           onChange={(e) => setSubjectFilter(e.target.value)}
         >
           <option value="all">All subjects</option>
-          {data.subjects.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
+          {data.subjects
+            .filter((s) => s.track === data.activeTrack)
+            .map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
         </select>
         <label className="check">
           <input

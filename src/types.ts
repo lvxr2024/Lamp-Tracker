@@ -1,9 +1,12 @@
+export type Track = 'igcse' | 'ib';
+
 export type SubjectColor = 'slate' | 'moss' | 'rust' | 'plum' | 'teal';
 
 export interface Subject {
   id: string;
   name: string;
   color: SubjectColor;
+  track: Track;
   createdAt: number;
 }
 
@@ -99,6 +102,7 @@ export interface AppData {
   tests: Test[];
   activeSession: ActiveSession | null;
   lastUsed: LastUsed;
+  activeTrack: Track;
 }
 
 export type Screen = 'focus' | 'sessions' | 'stats' | 'results';

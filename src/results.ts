@@ -97,9 +97,14 @@ export function blockSessions(test: Test, data: AppData): Session[] {
 }
 
 /**
- * Default prep block for a test taken at `takenAt`: every completed session of
- * the subject after the previous test's takenAt (or all of them, for a first
- * test) and at or before the test itself.
+ * Default prep block for a test taken at `takenAt` in `subjectId`.
+ *
+ * The cutoff is the latest endedAt among the sessions attached to the most
+ * recent OTHER test in the same subject — including one taken the same
+ * calendar day, so end-of-day takenAt values never hide the previous test.
+ * Selected: this subject's sessions with endedAt > cutoff and
+ * endedAt <= takenAt. A first test in the subject has no cutoff, so every
+ * session up to takenAt qualifies. Other subjects are never included.
  */
 export function defaultBlockSessions(
   subjectId: string,
@@ -107,13 +112,21 @@ export function defaultBlockSessions(
   data: AppData,
   excludeTestId?: string,
 ): Session[] {
-  const prev = previousTest(subjectId, takenAt, data, excludeTestId);
+  const prev = data.tests
+    .filter((t) => t.subjectId === subjectId && t.id !== excludeTestId)
+    .sort((a, b) => b.takenAt - a.takenAt || b.createdAt - a.createdAt)[0];
+  let cutoff = 0;
+  if (prev) {
+    const byId = new Map(data.sessions.map((s) => [s.id, s]));
+    for (const id of prev.sessionIds) {
+      const s = byId.get(id);
+      if (s && s.subjectId === subjectId && s.endedAt > cutoff) cutoff = s.endedAt;
+    }
+  }
   return data.sessions
     .filter(
       (s) =>
-        s.subjectId === subjectId &&
-        s.endedAt > (prev?.takenAt ?? 0) &&
-        s.endedAt <= takenAt,
+        s.subjectId === subjectId && s.endedAt > cutoff && s.endedAt <= takenAt,
     )
     .sort((a, b) => b.endedAt - a.endedAt);
 }

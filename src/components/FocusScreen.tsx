@@ -56,19 +56,30 @@ function IdleView({
   onDeleteSubject: (id: string) => void;
 }) {
   const now = useNow();
-  const todaySessions = data.sessions.filter((s) => sameDay(s.endedAt, now));
+  const trackSubjects = useMemo(
+    () => data.subjects.filter((s) => s.track === data.activeTrack),
+    [data.subjects, data.activeTrack],
+  );
+  const todaySessions = data.sessions.filter(
+    (s) => trackSubjects.some((sub) => sub.id === s.subjectId) && sameDay(s.endedAt, now),
+  );
   const todayMs = todaySessions.reduce((sum, s) => sum + s.focusedMs, 0);
 
   const [subjectId, setSubjectId] = useState<string | null>(
-    data.lastUsed.subjectId && data.subjects.some((s) => s.id === data.lastUsed.subjectId)
+    data.lastUsed.subjectId && trackSubjects.some((s) => s.id === data.lastUsed.subjectId)
       ? data.lastUsed.subjectId
-      : (data.subjects[0]?.id ?? null),
+      : (trackSubjects[0]?.id ?? null),
   );
   const [modeLabel, setModeLabel] = useState(data.lastUsed.modeLabel);
   const [showNewSubject, setShowNewSubject] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newColor, setNewColor] = useState<SubjectColor>(firstFreeColor(data.subjects.map((s) => s.color)));
+  const [newColor, setNewColor] = useState<SubjectColor>(firstFreeColor(trackSubjects.map((s) => s.color)));
+  // after a track switch the remembered selection may belong to the other desk
+  const effectiveSubjectId =
+    subjectId && trackSubjects.some((s) => s.id === subjectId)
+      ? subjectId
+      : (trackSubjects[0]?.id ?? null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -76,27 +87,27 @@ function IdleView({
   }, []);
 
   const recentModes = useMemo(() => {
-    if (!subjectId) return [];
+    if (!effectiveSubjectId) return [];
     const labels = new Set<string>();
     const out: string[] = [];
     // most recently used first: sessions newest → oldest, then any remaining saved modes
     const byTime = [...data.sessions].sort((a, b) => b.endedAt - a.endedAt);
     for (const s of byTime) {
-      if (s.subjectId === subjectId && !labels.has(s.modeLabel)) {
+      if (s.subjectId === effectiveSubjectId && !labels.has(s.modeLabel)) {
         labels.add(s.modeLabel);
         out.push(s.modeLabel);
       }
     }
     for (const m of data.modes) {
-      if (m.subjectId === subjectId && !labels.has(m.label)) {
+      if (m.subjectId === effectiveSubjectId && !labels.has(m.label)) {
         labels.add(m.label);
         out.push(m.label);
       }
     }
     return out.slice(0, 6);
-  }, [data.sessions, data.modes, subjectId]);
+  }, [data.sessions, data.modes, effectiveSubjectId]);
 
-  const canStart = subjectId !== null && modeLabel.trim().length > 0;
+  const canStart = effectiveSubjectId !== null && modeLabel.trim().length > 0;
 
   const submitNewSubject = () => {
     if (!newName.trim()) return;
@@ -119,13 +130,13 @@ function IdleView({
           Subject
         </span>
         <div className="segmented" role="group" aria-labelledby="subject-label">
-          {data.subjects.map((s) => (
+          {trackSubjects.map((s) => (
             <button
               key={s.id}
               type="button"
-              className={subjectId === s.id ? 'seg is-active' : 'seg'}
+              className={effectiveSubjectId === s.id ? 'seg is-active' : 'seg'}
               onClick={() => setSubjectId(s.id)}
-              aria-pressed={subjectId === s.id}
+              aria-pressed={effectiveSubjectId === s.id}
             >
               <span className={`tick tick-${s.color}`} aria-hidden="true" />
               {s.name}
@@ -140,7 +151,7 @@ function IdleView({
             + New subject
           </button>
         </div>
-        {data.subjects.length > 0 && (
+        {trackSubjects.length > 0 && (
           <button type="button" className="link-muted manage-link" onClick={() => setManageOpen(true)}>
             Manage subjects
           </button>
@@ -199,7 +210,7 @@ function IdleView({
           value={modeLabel}
           onChange={(e) => setModeLabel(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && canStart) onStart(subjectId!, modeLabel);
+            if (e.key === 'Enter' && canStart) onStart(effectiveSubjectId!, modeLabel);
           }}
           autoComplete="off"
         />
@@ -224,7 +235,7 @@ function IdleView({
         type="button"
         className="btn btn-primary btn-start"
         disabled={!canStart}
-        onClick={() => onStart(subjectId!, modeLabel)}
+        onClick={() => onStart(effectiveSubjectId!, modeLabel)}
       >
         Start session
       </button>

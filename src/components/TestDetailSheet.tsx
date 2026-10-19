@@ -36,11 +36,20 @@ export function TestDetailSheet({
   const [saved, setSaved] = useState(false);
 
   const takenAt = endOfDay(parseISODate(dateStr));
-  // window follows subject (fixed here) and the edited date; excludes this test
-  const windowSessions = useMemo(
-    () => defaultBlockSessions(test.subjectId, takenAt, data, test.id),
-    [data, test.subjectId, test.id, takenAt],
-  );
+  // window follows subject (fixed here) and the edited date; excludes this test.
+  // Already-attached sessions stay listed even when they fall before the
+  // previous test's cutoff, so saving never silently detaches them.
+  const windowSessions = useMemo(() => {
+    const base = defaultBlockSessions(test.subjectId, takenAt, data, test.id);
+    const inWindow = new Set(base.map((s) => s.id));
+    const attached = data.sessions.filter(
+      (s) =>
+        s.subjectId === test.subjectId &&
+        test.sessionIds.includes(s.id) &&
+        !inWindow.has(s.id),
+    );
+    return [...attached, ...base].sort((a, b) => b.endedAt - a.endedAt);
+  }, [data, test.subjectId, test.id, test.sessionIds, takenAt]);
   const [checked, setChecked] = useState<ReadonlySet<string>>(
     () => new Set(test.sessionIds.filter((id) => windowSessions.some((s) => s.id === id))),
   );
@@ -206,9 +215,10 @@ export function TestDetailSheet({
           <label className="field-label" htmlFor="edit-test-feedback">
             Feedback
           </label>
-          <input
+          <textarea
             id="edit-test-feedback"
-            className="input"
+            className="input notes-input"
+            rows={4}
             placeholder="What did the paper show you?"
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
