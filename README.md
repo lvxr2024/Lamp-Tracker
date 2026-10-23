@@ -33,9 +33,12 @@ To run Lamp locally:
    git clone https://github.com/lvxr2024/Lamp-Tracker.git
    cd Lamp-Tracker
 2. **Install dependencies:**
-    npm install
+   ```bash
+   npm install
 3. **Set up environment variables:**
-    Create a .env file in the root directory and add your Gemini API key (there is a .env.example file available too):
+   ```bash
+   Create a .env file in the root directory and add your Gemini API key (there is a .env.example file available too):
     VITE_GEMINI_API_KEY=your_api_key_here
 4. **Start the server**
-    npm run dev
+    ```bash
+   npm run dev
