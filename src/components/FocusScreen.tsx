@@ -3,11 +3,15 @@ import type { AppData, SubjectColor } from '../types';
 import { SUBJECT_COLORS } from '../types';
 import { useNow } from '../hooks/useNow';
 import { activeFocusedMs, activePausedMs, formatDuration, sameDay } from '../utils';
+import { EYECARE_BOUNDARY_MS } from '../eyecare';
 import { TimerDisplay } from './TimerDisplay';
 import { ManageSubjectsSheet } from './ManageSubjectsSheet';
 
 interface Props {
   data: AppData;
+  eyecare: boolean;
+  onToggleEyecare: () => void;
+  onEyecareTick: () => void;
   onStart: (subjectId: string, modeLabel: string) => void;
   onPause: () => void;
   onEnd: () => void;
@@ -18,6 +22,9 @@ interface Props {
 
 export function FocusScreen({
   data,
+  eyecare,
+  onToggleEyecare,
+  onEyecareTick,
   onStart,
   onPause,
   onEnd,
@@ -27,11 +34,23 @@ export function FocusScreen({
 }: Props) {
   const active = data.activeSession;
   if (active) {
-    return <RunningView subjectName={data.subjects.find((s) => s.id === active.subjectId)?.name} active={active} onPause={onPause} onEnd={onEnd} />;
+    return (
+      <RunningView
+        subjectName={data.subjects.find((s) => s.id === active.subjectId)?.name}
+        active={active}
+        eyecare={eyecare}
+        onToggleEyecare={onToggleEyecare}
+        onEyecareTick={onEyecareTick}
+        onPause={onPause}
+        onEnd={onEnd}
+      />
+    );
   }
   return (
     <IdleView
       data={data}
+      eyecare={eyecare}
+      onToggleEyecare={onToggleEyecare}
       onStart={onStart}
       onAddSubject={onAddSubject}
       onRenameSubject={onRenameSubject}
@@ -44,12 +63,16 @@ export function FocusScreen({
 
 function IdleView({
   data,
+  eyecare,
+  onToggleEyecare,
   onStart,
   onAddSubject,
   onRenameSubject,
   onDeleteSubject,
 }: {
   data: AppData;
+  eyecare: boolean;
+  onToggleEyecare: () => void;
   onStart: (subjectId: string, modeLabel: string) => void;
   onAddSubject: (name: string, color: SubjectColor) => string;
   onRenameSubject: (id: string, name: string, color: SubjectColor) => void;
@@ -231,6 +254,18 @@ function IdleView({
         )}
       </div>
 
+      <div className="field-group">
+        <label className="check eyecare-toggle">
+          <input
+            type="checkbox"
+            checked={eyecare}
+            onChange={onToggleEyecare}
+          />
+          Eyecare
+        </label>
+        <p className="helper">Auto-pause every 25 focused minutes so you can rest your eyes.</p>
+      </div>
+
       <button
         type="button"
         className="btn btn-primary btn-start"
@@ -261,18 +296,30 @@ function firstFreeColor(used: SubjectColor[]): SubjectColor {
 function RunningView({
   subjectName,
   active,
+  eyecare,
+  onToggleEyecare,
+  onEyecareTick,
   onPause,
   onEnd,
 }: {
   subjectName: string | undefined;
   active: AppData['activeSession'] & object;
+  eyecare: boolean;
+  onToggleEyecare: () => void;
+  onEyecareTick: () => void;
   onPause: () => void;
   onEnd: () => void;
 }) {
   const now = useNow();
+  useEffect(() => {
+    if (eyecare && active.status === 'running') onEyecareTick();
+  }, [now, eyecare, active.status, onEyecareTick]);
   const focused = activeFocusedMs(active, now);
   const paused = activePausedMs(active, now);
   const isRunning = active.status === 'running';
+  const pauseStretch = active.pausedSince !== null ? now - active.pausedSince : 0;
+  const nextBreak =
+    (Math.floor(focused / EYECARE_BOUNDARY_MS) + 1) * EYECARE_BOUNDARY_MS;
 
   return (
     <div className="focus-running">
@@ -293,6 +340,29 @@ function RunningView({
         {paused > 0 && <span className="status-paused-total">Paused total {formatDuration(paused)}</span>}
       </div>
 
+      {eyecare && isRunning && active.eyecareWarnPending && (
+        <div className="eyecare-panel" role="alert">
+          <p className="eyecare-panel-title">Time for an eye break</p>
+          <p className="eyecare-panel-body">
+            Open Lamp and pause, then look outside.
+          </p>
+        </div>
+      )}
+      {eyecare && isRunning && (
+        <p className="eyecare-line">Next eye break at {eyecareClock(nextBreak)}</p>
+      )}
+      {eyecare && !isRunning && active.pausedSince !== null && (
+        <p
+          className={
+            pauseStretch < 60_000
+              ? 'eyecare-line eyecare-rest is-hot'
+              : 'eyecare-line eyecare-rest'
+          }
+        >
+          Rest your eyes · {eyecareClock(pauseStretch)} — look away from the screen.
+        </p>
+      )}
+
       <div className="run-actions">
         <button type="button" className="btn btn-secondary" onClick={onPause}>
           {isRunning ? 'Pause' : 'Resume'}
@@ -301,6 +371,21 @@ function RunningView({
           End session
         </button>
       </div>
+
+      <label className="check eyecare-toggle eyecare-toggle-running">
+        <input type="checkbox" checked={eyecare} onChange={onToggleEyecare} />
+        Eyecare
+      </label>
     </div>
   );
+}
+
+/** m:ss (or h:mm:ss) — for eye-break targets and the current pause stretch. */
+function eyecareClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }

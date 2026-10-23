@@ -29,6 +29,7 @@ export function seedData(): AppData {
     activeSession: null,
     lastUsed: { subjectId: subjects[0].id, modeLabel: '' },
     activeTrack: 'igcse',
+    eyecareEnabled: false,
   };
 }
 
@@ -134,7 +135,7 @@ function migrate(data: AppData): AppData {
     modes.push(...ib.modes);
   }
 
-  return { ...data, subjects, modes, activeTrack };
+  return { ...data, subjects, modes, activeTrack, eyecareEnabled: data.eyecareEnabled === true };
 }
 
 export function saveData(data: AppData): void {

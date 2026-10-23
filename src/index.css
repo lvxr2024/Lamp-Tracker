@@ -652,6 +652,60 @@ button {
   margin-top: 12px;
 }
 
+/* ---------- eyecare ---------- */
+
+.eyecare-toggle {
+  align-self: flex-start;
+  color: var(--text);
+  font-size: 14.5px;
+}
+
+.eyecare-toggle-running {
+  align-self: center;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.eyecare-line {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13.5px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+/* current pause stretch: danger red under a minute, muted after — color only, no pulse */
+.eyecare-rest.is-hot {
+  color: var(--danger);
+}
+
+/* unacknowledged eye-break warning: full-width panel, danger accent, both themes */
+.eyecare-panel {
+  width: 100%;
+  padding: 18px 20px;
+  text-align: center;
+  background: var(--glass);
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: 14px;
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  box-shadow: var(--glass-highlight), 0 0 24px color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.eyecare-panel-title {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 20px;
+  color: var(--danger);
+}
+
+.eyecare-panel-body {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--text);
+}
+
 /* ---------- log sheet / modal ---------- */
 
 .sheet-overlay {

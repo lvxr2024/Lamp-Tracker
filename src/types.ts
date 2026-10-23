@@ -65,6 +65,10 @@ export interface ActiveSession {
   /** timestamp the current pause stretch began; null while running */
   pausedSince: number | null;
   status: 'running' | 'paused';
+  /** largest 25-minute focused boundary already warned at (eyecare); 0/undefined = none */
+  lastEyecareBoundaryMs?: number;
+  /** eyecare warning fired and not yet acknowledged by pausing; persists across reloads */
+  eyecareWarnPending?: boolean;
 }
 
 export interface LastUsed {
@@ -103,6 +107,8 @@ export interface AppData {
   activeSession: ActiveSession | null;
   lastUsed: LastUsed;
   activeTrack: Track;
+  /** eyecare auto-pause (every 25 focused minutes); shared by both tracks */
+  eyecareEnabled: boolean;
 }
 
 export type Screen = 'focus' | 'sessions' | 'stats' | 'results';

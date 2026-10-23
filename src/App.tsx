@@ -3,6 +3,13 @@ import type { ActiveSession, AppData, BlockReading, Screen, Session, SessionPatc
 import { loadData, saveData, uid } from './storage';
 import { activeFocusedMs, activePausedMs, applySessionPatch, formatDuration } from './utils';
 import { OPTIMIZATION_MODE, optimizationSubjectId } from './optimization';
+import {
+  crossedEyecareBoundary,
+  maybeAskEyecareNotification,
+  notifyEyecareBreak,
+  playEyecareBeep,
+  unlockEyecareAudio,
+} from './eyecare';
 import { TopBar } from './components/TopBar';
 import { FocusScreen } from './components/FocusScreen';
 import { SessionsScreen } from './components/SessionsScreen';
@@ -34,6 +41,81 @@ export default function App() {
     document.documentElement.dataset.track = data.activeTrack;
   }, [data.activeTrack]);
 
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  // Eyecare: warn at each 25-minute focused boundary. Chrome throttles
+  // setInterval in background tabs, so also check on tab-focus / visibility
+  // using wall-clock focusedMs (runningSince), not the interval itself.
+  const tryEyecareWarn = useCallback(() => {
+    const d = dataRef.current;
+    if (!d.eyecareEnabled) return;
+    const a = d.activeSession;
+    if (!a || a.status !== 'running') return;
+    const crossed = crossedEyecareBoundary(
+      activeFocusedMs(a, Date.now()),
+      a.lastEyecareBoundaryMs ?? 0,
+    );
+    if (crossed === null) return;
+    playEyecareBeep();
+    notifyEyecareBreak();
+    setData((prev) => {
+      const cur = prev.activeSession;
+      if (!cur || cur.id !== a.id || cur.status !== 'running') return prev;
+      const crossedNow = crossedEyecareBoundary(
+        activeFocusedMs(cur, Date.now()),
+        cur.lastEyecareBoundaryMs ?? 0,
+      );
+      if (crossedNow === null) return prev;
+      return {
+        ...prev,
+        activeSession: {
+          ...cur,
+          lastEyecareBoundaryMs: crossedNow,
+          eyecareWarnPending: true,
+        },
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!data.eyecareEnabled) return;
+    tryEyecareWarn();
+    const id = window.setInterval(tryEyecareWarn, 1000);
+    const kick = () => tryEyecareWarn();
+    document.addEventListener('visibilitychange', kick);
+    window.addEventListener('focus', kick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', kick);
+      window.removeEventListener('focus', kick);
+    };
+  }, [data.eyecareEnabled, data.activeSession?.id, data.activeSession?.status, tryEyecareWarn]);
+
+  // Eyecare: flash the tab title between "Lamp" and "Rest your eyes" while a
+  // warning is unacknowledged — works at Mac volume 0. Stops when the user
+  // pauses (flag cleared), turns Eyecare off, or ends the session; the
+  // normal title is always restored.
+  useEffect(() => {
+    const flashing = data.eyecareEnabled && data.activeSession?.eyecareWarnPending === true;
+    if (!flashing) {
+      document.title = 'Lamp';
+      return;
+    }
+    let showAlt = true;
+    document.title = 'Rest your eyes';
+    const id = window.setInterval(() => {
+      showAlt = !showAlt;
+      document.title = showAlt ? 'Rest your eyes' : 'Lamp';
+    }, 1000);
+    return () => {
+      window.clearInterval(id);
+      document.title = 'Lamp';
+    };
+  }, [data.eyecareEnabled, data.activeSession?.eyecareWarnPending, data.activeSession?.id]);
+
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
@@ -41,6 +123,8 @@ export default function App() {
   }, []);
 
   const startSession = useCallback((subjectId: string, modeLabel: string) => {
+    unlockEyecareAudio();
+    maybeAskEyecareNotification();
     setData((d) => {
       const trimmed = modeLabel.trim();
       let mode = d.modes.find(
@@ -63,6 +147,8 @@ export default function App() {
         runningSince: now,
         pausedSince: null,
         status: 'running',
+        lastEyecareBoundaryMs: 0,
+        eyecareWarnPending: false,
       };
       return {
         ...d,
@@ -87,6 +173,8 @@ export default function App() {
             runningSince: null,
             pausedSince: now,
             status: 'paused',
+            // pausing acknowledges an eyecare warning — the rest clock takes over
+            eyecareWarnPending: false,
           },
         };
       }
@@ -249,6 +337,18 @@ export default function App() {
     setScreen('results');
   }, []);
 
+  /** Eyecare toggle. Do not skip the current 25-minute mark — if focused
+   * time is already past a boundary, the next tick will warn immediately. */
+  const toggleEyecare = useCallback(() => {
+    setData((d) => {
+      const next = !d.eyecareEnabled;
+      if (!next) return { ...d, eyecareEnabled: false };
+      unlockEyecareAudio();
+      maybeAskEyecareNotification();
+      return { ...d, eyecareEnabled: true };
+    });
+  }, []);
+
   /** Switch desks; a running session on the other track blocks the switch. */
   const setTrack = useCallback(
     (track: Track) => {
@@ -295,6 +395,9 @@ export default function App() {
         {screen === 'focus' && (
           <FocusScreen
             data={data}
+            eyecare={data.eyecareEnabled}
+            onToggleEyecare={toggleEyecare}
+            onEyecareTick={tryEyecareWarn}
             onStart={startSession}
             onPause={togglePause}
             onEnd={endSession}
