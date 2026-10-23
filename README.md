@@ -1,32 +1,41 @@
-# React + TypeScript + Vite
+# 💡💡💡 Lamp (Lamp-Tracker) 💡💡💡
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+> **An AI-driven academic focus environment that replaces generic time-tracking with qualitative cognitive friction diagnostics**
 
-Currently, two official plugins are available:
+Standard productivity apps can only reduce studying to a cold metric: *"You studied for 40 minutes."* But cognitive efficiency isn't a clean numeric formula! Lamp is hence built to track the actual mental process of studying. I used structured focus blocks with unstructured friction logging, as wellas a Gemini API to cross-reference study habits with actual exam mark schemes and provide actionable diagnostic feedback.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Core Features
 
-## React Compiler
+*   **Qualitative Friction Logging:** A structured environment to log real-time cognitive roadblocks (e.g., "stuck on kinematic chain rotation!") instead of just tracking elapsed time.
+*   **Gemini Diagnostic Engine:** Uses a custom-prompted LLM pipeline to act as a ruthless diagnostic engine, returning gaps, issues and possible adaptions to solve them.
+*   **Mark-Scheme Aligned Feedback:** Generates specific, imperative "next modes" (e.g., "Drill Paper 1 Q4 synthesis under 15-minute time pressure") rather than just generic study tips.
+*   **Built-in Eye Care & Focus Tooling:** Integrates background-friendly notifications for eye-care breaks (When turned on, every 25min, Lamp makes a sound to remind you to go to lamp and pause).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## System Architecture
 
-## Expanding the Oxlint configuration
+Lamp processes unstructured study data into structured behavioral insights:
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+`User Friction Log & Focus Timer` ➔ `Client State` ➔ `System Prompt & Context Injection` ➔ `Gemini API` ➔ `Parsed Structured JSON Diagnostic` ➔ `UI Render`
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
+## Tech Stack
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+*   **Frontend:** React, TypeScript, Vite
+*   **Styling:** Tailwind CSS
+*   **AI Integration:** Google Gemini API 
+*   **Development Tools:** Claude, Kimi for coding, Cursor (for prompt engineering and some state debugging)
+
+## Quick Start
+
+To run Lamp locally:
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/lvxr2024/Lamp-Tracker.git
+   cd Lamp-Tracker
+2. **Install dependencies:**
+    npm install
+3. **Set up environment variables:**
+    Create a .env file in the root directory and add your Gemini API key (there is a .env.example file available too):
+    VITE_GEMINI_API_KEY=your_api_key_here
+4. **Start the server**
+    npm run dev
