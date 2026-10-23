@@ -63,7 +63,7 @@ export function BlockReader({ payload, subjectId, initialReading, onSave, onNext
             <dd>{reading.pattern}</dd>
           </div>
           <div>
-            <dt>Gap</dt>
+            <dt>Your improvements</dt>
             <dd>{reading.gap}</dd>
           </div>
           <div>
